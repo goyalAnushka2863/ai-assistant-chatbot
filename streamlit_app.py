@@ -84,7 +84,7 @@ if is_ready and llm_chain:
         else:
             st.warning("Please enter a topic before generating the guide.")
     
-    st.caption(f"Powered by LangChain and {OLLAMA_MODEL} via Ollama.")
+    st.caption(f"Powered by LangChain and Google genai.")
 
 # --- How to Run Instructions (for the user) ---
 st.sidebar.markdown("### 🏃 How to Run This App")
