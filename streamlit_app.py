@@ -1,10 +1,11 @@
 import streamlit as st
 from langchain_ollama import OllamaLLM
 from langchain_core.prompts import ChatPromptTemplate
-
+from langchain_google_genai import ChatGoogleGenerativeAI # if using Gemini
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 # --- Configuration ---
 # You can change the model name if you pulled a different one (e.g., 'mistral', 'gemma:2b')
-OLLAMA_MODEL = "llama3"
+# OLLAMA_MODEL = "llama3"
 
 # --- Streamlit Page Setup ---
 st.set_page_config(
@@ -27,7 +28,7 @@ def setup_llm_chain():
     """Initializes the Ollama model and LangChain prompt template."""
     try:
         # 1. Initialize the LLM (Connects to the running Ollama instance)
-        llm = OllamaLLM(model=OLLAMA_MODEL)
+        # llm = OllamaLLM(model=OLLAMA_MODEL)
         
         # 2. Define the Prompt Template
         system_prompt = (
