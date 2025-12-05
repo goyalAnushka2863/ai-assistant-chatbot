@@ -1,13 +1,9 @@
 import streamlit as st
-from langchain_ollama import OllamaLLM
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI # if using Gemini
+from dotenv import load_dotenv
+load_dotenv()
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
-# --- Configuration ---
-# You can change the model name if you pulled a different one (e.g., 'mistral', 'gemma:2b')
-# OLLAMA_MODEL = "llama3"
-
-# --- Streamlit Page Setup ---
 st.set_page_config(
     page_title="AI Study Assistant (Ollama + LangChain)",
     layout="centered",
@@ -15,26 +11,33 @@ st.set_page_config(
 )
 
 st.title("🧠 AI Study Assistant")
-st.markdown(
-    """
-    Enter any topic or question, and your local **Ollama** LLM (using the **LangChain** framework) will generate a concise, educational summary and suggest follow-up questions.
-    ---
-    """
-)
+
+
+# Initialize Session State for Chat History
+if "messages" not in st.session_state:
+    st.session_state["messages"] = [
+        {"role": "assistant", "content": f"Hello! I am ready to generate study guides using the gemini model. What topic would you like to study today?"}
+    ]
+if "is_ready" not in st.session_state:
+    st.session_state["is_ready"] = False
+if "llm_chain" not in st.session_state:
+    st.session_state["llm_chain"] = None
+
 
 # Initialize the Ollama LLM and Prompt Template
 @st.cache_resource
 def setup_llm_chain():
     """Initializes the Ollama model and LangChain prompt template."""
+    st.info(f"Attempting to initialize LangChain with Ollama model...")
     try:
         # 1. Initialize the LLM (Connects to the running Ollama instance)
-        # llm = OllamaLLM(model=OLLAMA_MODEL)
         
         # 2. Define the Prompt Template
         system_prompt = (
             "You are an expert, concise study assistant. "
             "Your task is to provide an educational summary of the user's topic and suggest 3 related, challenging follow-up questions to test their knowledge. "
-            "Format your response clearly with a 'Summary' section and a 'Follow-Up Questions' section."
+            "Format your response clearly with a 'Summary' section and a 'Follow-Up Questions' section. "
+            "Respond using clear Markdown formatting."
         )
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
@@ -42,61 +45,61 @@ def setup_llm_chain():
         ])
         
         # 3. Create the Chain
-        chain = prompt | llm
-        return chain, True
+        # Add a StrOutputParser to ensure clean string output
+        chain = prompt | llm 
+        st.session_state["llm_chain"] = chain
+        st.session_state["is_ready"] = True
+        st.success(f"Assistant ready!")
+        return True
     except Exception as e:
-        # This typically fails if Ollama is not running or the model is not pulled.
         st.error(f"Error initializing Ollama or LangChain: {e}")
-        st.warning(
-            "Please ensure Ollama is running and the model "
-            f"'{OLLAMA_MODEL}' is pulled (e.g., `ollama pull {OLLAMA_MODEL}`)."
-        )
-        return None, False
+        # st.warning(
+        #     "Please ensure Ollama is running and the model "
+        #     f"'{OLLAMA_MODEL}' is pulled (e.g., `ollama pull {OLLAMA_MODEL}`)."
+        # )
+        st.session_state["is_ready"] = False
+        return False
 
-llm_chain, is_ready = setup_llm_chain()
+# Setup the chain once
+if not st.session_state["is_ready"]:
+    setup_llm_chain()
 
-# --- Application Logic ---
-if is_ready and llm_chain:
-    # User Input
-    user_topic = st.text_area(
-        "Enter your study topic (e.g., 'The Krebs Cycle', 'The causes of World War I', or 'Quick summary of React Hooks')",
-        key="topic_input",
-        height=100
-    )
+# --- Application Logic (Chat Interface) ---
+if st.session_state["is_ready"] and st.session_state["llm_chain"]:
+    
+    # 1. Display Chat History
+    for message in st.session_state["messages"]:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-    # Generation Button
-    if st.button("Generate Study Guide", type="primary"):
-        if user_topic:
+    # 2. Handle New User Input
+    if user_topic := st.chat_input("Ask me anything"):
+        
+        # Add user message to chat history
+        st.session_state["messages"].append({"role": "user", "content": user_topic})
+        
+        # Display user message immediately
+        with st.chat_message("user"):
+            st.markdown(user_topic)
+
+        # Generate response
+        with st.chat_message("assistant"):
             # Use a spinner while the LLM processes the request
-            with st.spinner(f"Asking {OLLAMA_MODEL} to generate your study guide..."):
+            with st.spinner(f"Asking assistant to generate study guide for '{user_topic}'..."):
                 try:
                     # Invoke the LangChain
-                    response = llm_chain.invoke({"topic": user_topic})
+                    llm_chain = st.session_state["llm_chain"]
+                    # Use stream to show response chunk-by-chunk for a better chat feel
+                    stream = llm_chain.stream({"topic": user_topic})
                     
-                    # Display the result
-                    st.divider()
-                    st.subheader("📝 Generated Study Guide")
-                    st.markdown(response)
+                    full_response = st.write_stream(stream)
+                    
+                    # Add assistant response to chat history
+                    st.session_state["messages"].append({"role": "assistant", "content": full_response})
 
                 except Exception as e:
-                    st.error(f"An error occurred during generation: {e}")
+                    error_message = f"An error occurred during generation: {e}"
+                    st.error(error_message)
                     st.warning("Ensure the Ollama service is still running and accessible.")
-        else:
-            st.warning("Please enter a topic before generating the guide.")
-    
-    st.caption(f"Powered by LangChain and Google genai.")
+                    st.session_state["messages"].append({"role": "assistant", "content": error_message})
 
-# --- How to Run Instructions (for the user) ---
-st.sidebar.markdown("### 🏃 How to Run This App")
-st.sidebar.code("streamlit run study_assistant.py")
-st.sidebar.markdown(
-    """
-    **Prerequisites:**
-    1.  Install Python dependencies: 
-        `pip install streamlit langchain langchain-core langchain-community`
-    2.  Install Ollama and pull the model:
-        `ollama pull llama3`
-    3.  Ensure Ollama is running: 
-        `ollama serve`
-    """
-)
