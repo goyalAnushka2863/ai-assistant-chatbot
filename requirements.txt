@@ -1,6 +1,6 @@
 streamlit
 langchain
-langchain_ollama
 langchain_core
 langchain_google_genai
 python-dotenv
+os
