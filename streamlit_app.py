@@ -1,42 +1,47 @@
 import streamlit as st
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI # if using Gemini
+from langchain_core.output_parsers import StrOutputParser 
+from langchain_google_genai import ChatGoogleGenerativeAI 
 from dotenv import load_dotenv
+import os
+
 load_dotenv()
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+
+EXTERNAL_MODEL = "gemini-2.5-flash"
+
 st.set_page_config(
-    page_title="AI Study Assistant (Ollama + LangChain)",
+    page_title=f"AI Study Assistant ({EXTERNAL_MODEL} + LangChain)", 
     layout="centered",
     initial_sidebar_state="collapsed"
 )
 
 st.title("🧠 AI Study Assistant")
-
+st.markdown(
+    f"""
+    Ask your **{EXTERNAL_MODEL}** LLM (using the **LangChain** framework) for a concise, educational summary on any topic. 
+    The assistant will also suggest follow-up questions to test your knowledge.
+    ---
+    """
+)
 
 # Initialize Session State for Chat History
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
-        {"role": "assistant", "content": f"Hello! I am ready to generate study guides using the gemini model. What topic would you like to study today?"}
+        {"role": "assistant", "content": f"Hello! I am ready to generate study guides using the {EXTERNAL_MODEL} model. What topic would you like to study today?"}
     ]
-if "is_ready" not in st.session_state:
-    st.session_state["is_ready"] = False
-if "llm_chain" not in st.session_state:
-    st.session_state["llm_chain"] = None
 
-
-# Initialize the Ollama LLM and Prompt Template
+# Initialize the LLM and Prompt Template (cached)
 @st.cache_resource
-def setup_llm_chain():
-    """Initializes the Ollama model and LangChain prompt template."""
-    st.info(f"Attempting to initialize LangChain with Ollama model...")
+def get_llm_chain():
+    """Initializes and returns the LLM chain."""
     try:
-        # 1. Initialize the LLM (Connects to the running Ollama instance)
+        llm = ChatGoogleGenerativeAI(
+            model=EXTERNAL_MODEL, 
+            api_key="AIzaSyACcYfbTQ4L9OW9qJfwTkMGTK85PhmxkrQ"
+        )
         
-        # 2. Define the Prompt Template
         system_prompt = (
             "You are an expert, concise study assistant. "
-            "Your task is to provide an educational summary of the user's topic and suggest 3 related, challenging follow-up questions to test their knowledge. "
-            "Format your response clearly with a 'Summary' section and a 'Follow-Up Questions' section. "
             "Respond using clear Markdown formatting."
         )
         prompt = ChatPromptTemplate.from_messages([
@@ -44,36 +49,28 @@ def setup_llm_chain():
             ("user", "{topic}")
         ])
         
-        # 3. Create the Chain
-        # Add a StrOutputParser to ensure clean string output
-        chain = prompt | llm 
-        st.session_state["llm_chain"] = chain
-        st.session_state["is_ready"] = True
-        st.success(f"Assistant ready!")
-        return True
+        chain = prompt | llm | StrOutputParser() 
+        return chain
     except Exception as e:
-        st.error(f"Error initializing Ollama or LangChain: {e}")
-        # st.warning(
-        #     "Please ensure Ollama is running and the model "
-        #     f"'{OLLAMA_MODEL}' is pulled (e.g., `ollama pull {OLLAMA_MODEL}`)."
-        # )
-        st.session_state["is_ready"] = False
-        return False
+        st.error(f"Error initializing LLM: {e}")
+        st.warning(
+            f"Please ensure your {EXTERNAL_MODEL} API key is correctly configured "
+            "in your environment variables or Streamlit secrets."
+        )
+        return None
 
-# Setup the chain once
-if not st.session_state["is_ready"]:
-    setup_llm_chain()
+# Get the chain (this will be cached after first run)
+llm_chain = get_llm_chain()
 
 # --- Application Logic (Chat Interface) ---
-if st.session_state["is_ready"] and st.session_state["llm_chain"]:
-    
+if llm_chain is not None:
     # 1. Display Chat History
     for message in st.session_state["messages"]:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
     # 2. Handle New User Input
-    if user_topic := st.chat_input("Ask me anything"):
+    if user_topic := st.chat_input(f"Ask me anything..."):
         
         # Add user message to chat history
         st.session_state["messages"].append({"role": "user", "content": user_topic})
@@ -84,14 +81,9 @@ if st.session_state["is_ready"] and st.session_state["llm_chain"]:
 
         # Generate response
         with st.chat_message("assistant"):
-            # Use a spinner while the LLM processes the request
-            with st.spinner(f"Asking assistant to generate study guide for '{user_topic}'..."):
+            with st.spinner(f"Generating study guide for '{user_topic}'..."):
                 try:
-                    # Invoke the LangChain
-                    llm_chain = st.session_state["llm_chain"]
-                    # Use stream to show response chunk-by-chunk for a better chat feel
                     stream = llm_chain.stream({"topic": user_topic})
-                    
                     full_response = st.write_stream(stream)
                     
                     # Add assistant response to chat history
@@ -100,6 +92,7 @@ if st.session_state["is_ready"] and st.session_state["llm_chain"]:
                 except Exception as e:
                     error_message = f"An error occurred during generation: {e}"
                     st.error(error_message)
-                    st.warning("Ensure the Ollama service is still running and accessible.")
+                    st.warning("Please check your Gemini API key and network connection.")
                     st.session_state["messages"].append({"role": "assistant", "content": error_message})
-
+else:
+    st.error("Failed to initialize the AI assistant. Please check your API key configuration.")
