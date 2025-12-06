@@ -37,6 +37,7 @@ def get_llm_chain():
     try:
         llm = ChatGoogleGenerativeAI(
             model=EXTERNAL_MODEL, 
+            max_output_tokens=500
         )
         
         system_prompt = (
