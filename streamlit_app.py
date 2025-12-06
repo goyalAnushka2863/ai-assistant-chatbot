@@ -37,8 +37,7 @@ def get_llm_chain():
     try:
         llm = ChatGoogleGenerativeAI(
             model=EXTERNAL_MODEL, 
-            max_output_tokens=500,
-            timeout=60.0
+            api_key=os.getenv("GEMINI_API_KEY")
         )
         
         system_prompt = (
